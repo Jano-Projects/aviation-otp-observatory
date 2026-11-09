@@ -17,11 +17,15 @@ prompt ==> Core tables
 prompt ==> Reference tables
 @ddl/030_reference.sql
 
+prompt ==> Star schema (mart)
+@ddl/040_mart.sql
+
 prompt ==> Package specifications
 @packages/pkg_vra_util.pks
 @packages/pkg_load_log.pks
 @packages/pkg_vra_load.pks
 @packages/pkg_ref_load.pks
+@packages/pkg_mart.pks
 
 prompt ==> Views
 @views/stg_vra_v.sql
@@ -31,6 +35,7 @@ prompt ==> Package bodies
 @packages/pkg_load_log.pkb
 @packages/pkg_vra_load.pkb
 @packages/pkg_ref_load.pkb
+@packages/pkg_mart.pkb
 
 prompt ==> Checking for invalid objects
 @admin/check_invalid.sql

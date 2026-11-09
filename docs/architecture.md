@@ -25,6 +25,7 @@ sequence and how it is tested. For the file format of the source data, see
 | Core | `CORE_FLIGHT`, `CORE_AIRLINE`, `CORE_AIRPORT` | validated, deduplicated flights and their dimensions | `pkg_vra_load` (names: `pkg_ref_load`) |
 | Reference | `STG_REF_AIRLINE`, `STG_REF_AIRPORT_ANAC`, `STG_REF_AIRPORT_OA` → `REF_AIRLINE`, `REF_AIRPORT` | airline and airport names and attributes from two sources | Python loader, `pkg_ref_load` |
 | Audit | `CORE_LOAD_RUN`, `CORE_VRA_REJECT` | one row per load run; every rejected line with its reason | `pkg_load_log`, `pkg_vra_load` |
+| Mart | `FACT_FLIGHT`, `DIM_DATE`, `DIM_HOUR`, `DIM_AIRLINE`, `DIM_AIRPORT` | star schema for analysis | `pkg_mart` |
 
 ## Tables
 
@@ -115,6 +116,42 @@ An OurAirports row matches a 4-character code by `icao_code` first, then `ident`
 airport's code). `sync_core` copies names onto `CORE_AIRLINE` and `CORE_AIRPORT`; the `load`
 command calls it after every month, so new codes get names at once.
 
+### `pkg_mart`: the star schema
+
+```sql
+procedure build_dim_date(p_from in date, p_to in date);
+function  refresh_dimensions return pls_integer;
+function  refresh_month(p_month in date) return number;   -- RUN_ID, logged as 'MART YYYY-MM'
+function  refresh_all return pls_integer;                  -- months refreshed
+```
+
+```mermaid
+erDiagram
+    FACT_FLIGHT }o--|| DIM_DATE : date_key
+    FACT_FLIGHT }o--|| DIM_HOUR : dep_hour
+    FACT_FLIGHT }o--|| DIM_AIRLINE : airline_key
+    FACT_FLIGHT }o--|| DIM_AIRPORT : "orig_airport_key, dest_airport_key"
+```
+
+| Table | Grain | Notes |
+|---|---|---|
+| `FACT_FLIGHT` | one flight leg (one `CORE_FLIGHT` row) | interval-partitioned by `MONTH_START`; measures `IS_FLOWN`, `IS_CANCELLED`, `IS_MEASURABLE`, `ON_TIME_15`, delays; `FLIGHT_ID` kept as degenerate dimension |
+| `DIM_DATE` | one day, key `YYYYMMDD` | Portuguese month and day names computed without NLS (`'IW'`, `'Q'`, date arithmetic); ISO weekday and week; weekend flag |
+| `DIM_HOUR` | one hour, 0 to 23 | period of the day: madrugada (0-5), manhã (6-11), tarde (12-17), noite (18-23) |
+| `DIM_AIRLINE` | one airline | surrogate identity key, name and nationality (SCD type 1) |
+| `DIM_AIRPORT` | one airport, used for origin and destination | surrogate key, name, city, state, country, coordinates, `IS_BRAZIL` |
+
+Design notes:
+
+- **Date of a flight** = scheduled departure, or actual departure for unscheduled flights.
+- **Fact foreign keys are `RELY DISABLE NOVALIDATE`**: the optimizer can use them (join
+  elimination, query rewrite in phase 2.3), but rows are not checked one by one. Integrity comes
+  from the load: facts are built with inner joins to the dimensions, and any flight left out is
+  counted as rejected in `CORE_LOAD_RUN`. Because a `RELY` foreign key may only reference a `RELY` primary
+  key (ORA-25158), the dimension primary keys are declared `RELY` as well.
+- **Refresh** = `DELETE` the month + `INSERT ... SELECT`, inside the caller's transaction: atomic
+  and unit-testable. Phase 2.4 measures it against a partition exchange.
+
 ## Load sequence
 
 ```
@@ -152,6 +189,7 @@ python tasks.py load --from 2026-07
 | Unit: parsing and rules | utPLSQL (`test_pkg_vra_util`) | `tasks.py test`, CI | literal values |
 | Unit: load behaviour | utPLSQL (`test_pkg_vra_load`) | `tasks.py test`, CI | 6 invented lines in month 2099, rolled back after each test |
 | Unit: reference merge | utPLSQL (`test_pkg_ref_load`) | `tasks.py test`, CI | invented codes (`ZZA`, `ZZZA`, `ZZZB`), rolled back after each test |
+| Unit: star schema | utPLSQL (`test_pkg_mart`) | `tasks.py test`, CI | 4 invented flights in month 2099, rolled back after each test |
 | Unit: file reading | pytest | `pytest`, CI | real samples of each source (`tests/fixtures`) |
 | End to end | CI job | every push | the real sample loaded into a fresh Oracle |
 

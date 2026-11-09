@@ -240,7 +240,7 @@ python tasks.py install
 python tasks.py test
 ```
 
-**Deve ver no fim:** `28 tests, 0 failed, 0 errored, 0 disabled, 0 warning(s)`.
+**Deve ver no fim:** `37 tests, 0 failed, 0 errored, 0 disabled, 0 warning(s)`.
 
 ### D5. Carregar dados reais da ANAC
 
@@ -254,6 +254,9 @@ python tasks.py load --from 2026-01 --to 2026-07 --keep-going
 ==> Loading VRA_20267.csv
    VRA_20267.csv  month=2026-07  status=SUCCESS  staged=89,517  loaded=89,506  rejected=0  duplicates=11 ...
 ```
+
+No fim, o `load` constrói também o modelo em estrela de cada mês carregado:
+`star schema 2026-07: 89,506 facts`.
 
 O `--keep-going` salta os meses que ainda não estejam publicados.
 
@@ -275,6 +278,17 @@ aeroportos que aparecem nos voos.
 
 Os números exatos dependem dos meses carregados. O que importa é o primeiro número ser igual ao
 segundo: todas as companhias e todos os aeroportos ficaram com nome.
+
+### D5c. Reconstruir o modelo em estrela (só se já tinha dados de antes)
+
+Se carregou meses antes de instalar o modelo em estrela (versões anteriores do projeto), construa-o
+para todos os meses de uma vez:
+
+```bash
+python tasks.py mart
+```
+
+**Deve ver:** `7 month(s), 591,381 facts` (com os meses que tiver carregados).
 
 ### D6. Ver o resultado
 

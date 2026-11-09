@@ -5,6 +5,20 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added (phase 2.2: star schema)
+- `FACT_FLIGHT` (one row per flight, interval-partitioned by month, local indexes) with
+  `DIM_DATE`, `DIM_HOUR`, `DIM_AIRLINE` and `DIM_AIRPORT` (surrogate keys, SCD type 1).
+- `pkg_mart`: set-based calendar (Portuguese names, NLS-independent), dimension merges and an
+  atomic month refresh, logged in `CORE_LOAD_RUN` as `MART YYYY-MM`; 9 utPLSQL tests.
+- `python tasks.py mart`; `load` refreshes the star schema for the months it loads; `load-ref`
+  updates the dimensions; `status` shows facts against flights.
+
+### Fixed (phase 2.2)
+- Dimension primary keys are declared `RELY`, as required by the `RELY` foreign keys of
+  `FACT_FLIGHT` (the first install stopped with ORA-25158).
+- The install recompiles objects left invalid by an earlier step before checking for invalid
+  objects, so an upgrade no longer reports a stale invalid test package.
+
 ### Added (phase 2.1: reference data)
 - Airline and airport names from two sources with explicit precedence rules: ANAC statistics
   (official names in Portuguese, state, country) and OurAirports (official airport name, IATA,

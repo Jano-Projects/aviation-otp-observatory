@@ -12,6 +12,8 @@ prompt ==> Test packages
 @tests/test_pkg_vra_load.pkb
 @tests/test_pkg_ref_load.pks
 @tests/test_pkg_ref_load.pkb
+@tests/test_pkg_mart.pks
+@tests/test_pkg_mart.pkb
 
 prompt ==> Checking for invalid objects
 @admin/check_invalid.sql

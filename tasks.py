@@ -6,6 +6,7 @@
     python tasks.py test      compile and run the utPLSQL unit tests
     python tasks.py load      download and load VRA months (or a local file)
     python tasks.py load-ref  download and load airline/airport names (ANAC + OurAirports)
+    python tasks.py mart      rebuild the star schema (DIM_*, FACT_FLIGHT) for every month
     python tasks.py status    show the latest load runs and flights per month
     python tasks.py sql       open an interactive SQL*Plus session as OTP
     python tasks.py down      stop the container (data is kept)
@@ -252,7 +253,7 @@ def month_range(start: date, end: date) -> list[date]:
 
 
 def cmd_load(args: argparse.Namespace) -> None:
-    from loader.db import connect, load_file, sync_names
+    from loader.db import connect, load_file, refresh_mart, sync_names
     from loader.download import DownloadError, download_month
 
     cfg = env()
@@ -281,6 +282,7 @@ def cmd_load(args: argparse.Namespace) -> None:
                     fail("Download failed (use --keep-going to skip missing months).")
 
     failures = 0
+    summaries = []
     with connect("otp", cfg["OTP_PASSWORD"], int(cfg.get("ORACLE_PORT", "1521"))) as conn:
         for path, month in files:
             info(f"Loading {path.name}")
@@ -293,14 +295,20 @@ def cmd_load(args: argparse.Namespace) -> None:
             print(f"   {summary}")
             if summary.status != "SUCCESS":
                 failures += 1
-        if files:
+            else:
+                summaries.append(summary)
+        loaded = [summary.ref_month for summary in summaries]
+        if loaded:
             sync_names(conn)  # give names to codes these months may have added
+            for month in loaded:
+                _, facts = refresh_mart(conn, month)
+                print(f"   star schema {month:%Y-%m}: {facts:,} facts")
     if failures:
         fail(f"{failures} file(s) failed. See CORE_LOAD_RUN.ERROR_MESSAGE for details.")
 
 
 def cmd_load_ref(args: argparse.Namespace) -> None:
-    from loader.db import connect, load_reference
+    from loader.db import connect, load_reference, refresh_mart_dimensions
     from loader.download import DownloadError, download_file
     from loader.reference import ANAC_STATS_URL, OURAIRPORTS_URL
 
@@ -328,9 +336,22 @@ def cmd_load_ref(args: argparse.Namespace) -> None:
     info(f"Loading reference data from {anac.name} and {airports.name}")
     with connect("otp", cfg["OTP_PASSWORD"], int(cfg.get("ORACLE_PORT", "1521"))) as conn:
         summary = load_reference(conn, anac, airports)
+        if summary.status == "SUCCESS":
+            refresh_mart_dimensions(conn)  # new names reach the star schema at once
     print(f"   {summary}")
     if summary.status != "SUCCESS":
         fail("Reference load failed. See CORE_LOAD_RUN.ERROR_MESSAGE for details.")
+
+
+def cmd_mart(args: argparse.Namespace) -> None:
+    from loader.db import connect, refresh_mart
+
+    cfg = env()
+    require_running()
+    info("Rebuilding the star schema for every month")
+    with connect("otp", cfg["OTP_PASSWORD"], int(cfg.get("ORACLE_PORT", "1521"))) as conn:
+        months, facts = refresh_mart(conn)
+    print(f"   {months} month(s), {facts:,} facts")
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -361,6 +382,10 @@ def cmd_status(args: argparse.Namespace) -> None:
         airlines_named, airports_named = names_coverage(cur)
         info("Names (load them with: python tasks.py load-ref)")
         print(f"   airlines with a name: {airlines_named}    airports with a name: {airports_named}")
+        cur.execute("select (select count(*) from fact_flight), (select count(*) from core_flight) from dual")
+        facts, flights = cur.fetchone()
+        info("Star schema (rebuild with: python tasks.py mart)")
+        print(f"   facts: {facts:,} of {flights:,} flights")
 
 
 def cmd_sql(args: argparse.Namespace) -> None:
@@ -402,6 +427,7 @@ def main() -> None:
     p.add_argument("--force", action="store_true", help="download again even if the files exist")
     p.set_defaults(func=cmd_load_ref)
 
+    sub.add_parser("mart", help="rebuild the star schema for every month").set_defaults(func=cmd_mart)
     sub.add_parser("status", help="show load runs and monthly counts").set_defaults(func=cmd_status)
     sub.add_parser("sql", help="interactive SQL*Plus as OTP").set_defaults(func=cmd_sql)
 

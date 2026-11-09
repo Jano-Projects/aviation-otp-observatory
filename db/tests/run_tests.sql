@@ -24,11 +24,12 @@ begin
 
   -- The tests roll back their data, but the audit rows in CORE_LOAD_RUN are written
   -- in autonomous transactions on purpose, so they survive. Remove the ones the tests
-  -- created (VRA test files use the fake month 2099, reference test files start
-  -- with UT_REF) to keep the real audit log clean.
+  -- created (VRA test files and mart runs use the fake month 2099, reference test
+  -- files start with UT_REF) to keep the real audit log clean.
   delete from core_vra_reject where src_file like 'VRA\_2099%' escape '\';
   delete from core_load_run   where src_file like 'VRA\_2099%' escape '\'
-                                 or src_file like 'UT\_REF%' escape '\';
+                                 or src_file like 'UT\_REF%' escape '\'
+                                 or src_file like 'MART 2099%';
   commit;
 
   if l_summary is null then

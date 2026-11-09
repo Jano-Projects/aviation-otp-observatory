@@ -3,6 +3,14 @@
 -- so "whenever sqlerror" would not stop on them. This script shows the errors
 -- and fails explicitly when any object is invalid.
 --------------------------------------------------------------------------------
+-- First recompile whatever is invalid only because something it depends on was
+-- missing or changed earlier (for example a test package compiled before a new
+-- table existed). Objects with real errors stay invalid and are reported below.
+begin
+  dbms_utility.compile_schema(schema => user, compile_all => false);
+end;
+/
+
 set heading on feedback off pagesize 100 linesize 200
 column name format a30
 column type format a14
