@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q tests/python
+
+  database:
+    name: Oracle 23ai + utPLSQL
+    runs-on: ubuntu-latest
+    needs: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+
+      - name: Start Oracle Database Free
+        run: python tasks.py up
+
+      - name: Install utPLSQL and the schema
+        run: python tasks.py install
+
+      - name: Run utPLSQL unit tests
+        run: python tasks.py test
+
+      - name: Load a real sample file end to end
+        run: |
+          python tasks.py load --file tests/fixtures/VRA_20267_sample.csv
+          python tasks.py status
+
+      - name: Database logs (on failure)
+        if: failure()
+        run: docker compose logs oracle --tail 200

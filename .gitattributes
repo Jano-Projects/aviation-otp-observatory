@@ -1,0 +1,5 @@
+# Keep LF line endings everywhere (SQL*Plus scripts run inside a Linux container).
+* text=auto eol=lf
+
+# The fixture is a byte-for-byte sample of a real ANAC file (BOM + CRLF): keep it untouched.
+tests/fixtures/*.csv -text

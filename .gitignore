@@ -1,0 +1,19 @@
+# Local settings and secrets
+.env
+
+# Downloaded data and tools (recreated by tasks.py)
+data/
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
