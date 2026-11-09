@@ -1,0 +1,29 @@
+# Local development database: Oracle Database 23ai Free.
+# Everything else (Python loader, tests) talks to it through port ${ORACLE_PORT}.
+name: otp-observatory
+
+services:
+  oracle:
+    # Full (non-slim) image: keeps every component utPLSQL may rely on.
+    image: gvenzl/oracle-free:23
+    container_name: otp-oracle
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-Oracle_Sys_2026}
+    ports:
+      - "${ORACLE_PORT:-1521}:1521"
+    volumes:
+      # Database files survive "docker compose down" and computer restarts.
+      - oradata:/opt/oracle/oradata
+      # Project SQL scripts, read-only inside the container (run with SQL*Plus).
+      - ./db:/workspace/db:ro
+      # utPLSQL sources, downloaded by "python tasks.py install".
+      - ./.cache/utplsql:/workspace/utplsql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+
+volumes:
+  oradata:
