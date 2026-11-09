@@ -39,6 +39,7 @@ jobs:
       - name: Load a real sample file end to end
         run: |
           python tasks.py load --file tests/fixtures/VRA_20267_sample.csv
+          python tasks.py load-ref --anac-file tests/fixtures/anac_stats_sample.csv --airports-file tests/fixtures/ourairports_sample.csv
           python tasks.py status
 
       - name: Database logs (on failure)

@@ -240,7 +240,7 @@ python tasks.py install
 python tasks.py test
 ```
 
-**Deve ver no fim:** `18 tests, 0 failed, 0 errored, 0 disabled, 0 warning(s)`.
+**Deve ver no fim:** `28 tests, 0 failed, 0 errored, 0 disabled, 0 warning(s)`.
 
 ### D5. Carregar dados reais da ANAC
 
@@ -257,13 +257,33 @@ python tasks.py load --from 2026-01 --to 2026-07 --keep-going
 
 O `--keep-going` salta os meses que ainda não estejam publicados.
 
+### D5b. Carregar os nomes das companhias e dos aeroportos
+
+```bash
+python tasks.py load-ref
+```
+
+Descarrega duas fontes, só na primeira vez: os Dados Estatísticos da ANAC (cerca de 360 MB) e a
+lista de aeroportos do OurAirports (cerca de 13 MB). Depois junta-as e dá nome às companhias e aos
+aeroportos que aparecem nos voos.
+
+**Deve ver no fim:**
+```
+   status=SUCCESS  staged=...  merged=...  rejected=...  run_id=...
+   names in core: airlines 87/87, airports 289/289
+```
+
+Os números exatos dependem dos meses carregados. O que importa é o primeiro número ser igual ao
+segundo: todas as companhias e todos os aeroportos ficaram com nome.
+
 ### D6. Ver o resultado
 
 ```bash
 python tasks.py status
 ```
 
-**Deve ver:** a lista de carregamentos e, por mês, voos, cancelamentos e percentagem de pontualidade.
+**Deve ver:** a lista de carregamentos; por mês, voos, cancelamentos e percentagem de pontualidade;
+e quantas companhias e aeroportos têm nome.
 
 ### D7. Explorar com SQL (opcional)
 

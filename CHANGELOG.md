@@ -5,6 +5,16 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added (phase 2.1: reference data)
+- Airline and airport names from two sources with explicit precedence rules: ANAC statistics
+  (official names in Portuguese, state, country) and OurAirports (official airport name, IATA,
+  coordinates). New tables `REF_AIRLINE`, `REF_AIRPORT` and their staging tables.
+- `pkg_ref_load` (merge, precedence, copy of names to the core dimensions) with 10 utPLSQL tests.
+- `pkg_load_log`: the run log, now shared by every load package (refactored out of `pkg_vra_load`).
+- `python tasks.py load-ref`; `load` now gives names to codes that new months add; `status`
+  shows how many airlines and airports have a name.
+- Streaming download for large files; 8 pytest tests for the reference readers.
+
 ### Changed
 - README rewritten for first-time visitors: results, testing, documentation index, roadmap.
 - Documentation reorganised: English reference in `docs/`, Portuguese guides in `docs/pt/`.

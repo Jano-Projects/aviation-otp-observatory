@@ -1,49 +1,6 @@
 create or replace package body pkg_vra_load as
 
-  ------------------------------------------------------------------------------
-  -- Run log
-  ------------------------------------------------------------------------------
-  function start_run(p_src_file in varchar2, p_ref_month in date) return number is
-    pragma autonomous_transaction;
-    l_run_id core_load_run.run_id%type;
-  begin
-    insert into core_load_run (src_file, ref_month)
-    values (p_src_file, p_ref_month)
-    returning run_id into l_run_id;
-    commit;
-    return l_run_id;
-  end start_run;
-
-  procedure mark_failed(p_run_id in number, p_error in varchar2) is
-    pragma autonomous_transaction;
-  begin
-    update core_load_run
-       set status        = 'FAILED',
-           finished_at   = systimestamp,
-           error_message = substr(p_error, 1, 4000)
-     where run_id = p_run_id;
-    commit;
-  end mark_failed;
-
-  -- Not autonomous on purpose: the SUCCESS status is committed (or rolled back)
-  -- together with the data it describes.
-  procedure mark_success(
-    p_run_id     in number,
-    p_staged     in number,
-    p_loaded     in number,
-    p_rejected   in number,
-    p_duplicate  in number
-  ) is
-  begin
-    update core_load_run
-       set status         = 'SUCCESS',
-           finished_at    = systimestamp,
-           rows_staged    = p_staged,
-           rows_loaded    = p_loaded,
-           rows_rejected  = p_rejected,
-           rows_duplicate = p_duplicate
-     where run_id = p_run_id;
-  end mark_success;
+  -- The run log (CORE_LOAD_RUN) is written through pkg_load_log, shared with pkg_ref_load.
 
   ------------------------------------------------------------------------------
   -- Load steps
@@ -135,7 +92,7 @@ create or replace package body pkg_vra_load as
         'Cannot derive the reference month from file name "' || p_src_file || '". Pass p_ref_month.');
     end if;
 
-    l_run_id := start_run(p_src_file, l_ref_month);
+    l_run_id := pkg_load_log.start_run(p_src_file, l_ref_month);
     savepoint sp_process_file;
 
     begin
@@ -149,7 +106,7 @@ create or replace package body pkg_vra_load as
       register_airports(p_src_file, l_ref_month);
       l_loaded   := replace_month(l_run_id, p_src_file, l_ref_month);
 
-      mark_success(
+      pkg_load_log.mark_success(
         p_run_id    => l_run_id,
         p_staged    => l_staged,
         p_loaded    => l_loaded,
@@ -161,7 +118,7 @@ create or replace package body pkg_vra_load as
       when others then
         l_error := substr(sqlerrm || chr(10) || dbms_utility.format_error_backtrace, 1, 4000);
         rollback to savepoint sp_process_file;
-        mark_failed(l_run_id, l_error);
+        pkg_load_log.mark_failed(l_run_id, l_error);
         raise;
     end;
   end process_file;

@@ -46,3 +46,33 @@ parses both date styles.
    flown legs with both scheduled and actual arrival times.
 4. **Reference month = the file's month**, not the departure date: a few flights scheduled on
    the 31st land in the next month's dates but belong to the file they were published in.
+
+## Reference sources (phase 2.1)
+
+Measured on the September 2026 ANAC statistics file and the OurAirports file of November 2026.
+
+**ANAC *Dados Estatísticos do Transporte Aéreo*** (`Dados_Estatisticos.csv`)
+
+| Property | Value |
+|---|---|
+| Size | about 360 MB, 1.1 million lines (one per airline, route and month since 2000) |
+| Format | same as VRA: UTF-8 with BOM, CRLF, `Atualizado em` on line 1, header on line 2, `;`, quoted |
+| Used columns | `EMPRESA_SIGLA`, `EMPRESA_NOME`, `EMPRESA_NACIONALIDADE`, `ANO`, and for origin and destination: `SIGLA`, `NOME`, `UF`, `PAIS`, `CONTINENTE` |
+| Distinct tuples | about 2,400 airline tuples and 9,200 airport tuples: only these are staged |
+| Coverage | every airline in the VRA months loaded (87 of 87); 287 of 289 airports |
+
+Airport `NOME` is the city as ANAC writes it (`GUARULHOS`, `MIAMI, FLORIDA`), in upper case;
+country and continent are in Portuguese. A code can change name over the years (company
+renamed): the most recent year wins.
+
+**OurAirports** (`airports.csv`, public domain)
+
+| Property | Value |
+|---|---|
+| Size | about 13 MB, 86,000 rows (airports, heliports, seaplane bases, closed fields) |
+| Format | UTF-8, `,` separated, header on line 1 |
+| Codes | `icao_code` is often empty; the 4-character code may only be in `ident` or `gps_code` |
+| Coverage | all 289 airports of the VRA months, including the 2 ANAC lacks (`LFTM`, `SKGO`) |
+
+Some VRA codes are historical (`SEQU`, Quito's old airport, closed in 2013): ANAC still names them,
+OurAirports does not list them under that code, so they keep only the ANAC attributes.
