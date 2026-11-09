@@ -1,23 +1,35 @@
 # Aviation OTP Observatory
 
-**Free, open-source analytics on airline punctuality (on-time performance) for Brazil and Portugal, built on Oracle Database 23ai and PL/SQL.**
+[![CI](https://github.com/Jano-Projects/aviation-otp-observatory/actions/workflows/ci.yml/badge.svg)](https://github.com/Jano-Projects/aviation-otp-observatory/actions/workflows/ci.yml)
+![Oracle 23ai Free](https://img.shields.io/badge/Oracle-23ai%20Free-F80000)
+![PL/SQL](https://img.shields.io/badge/PL%2FSQL-utPLSQL%20tested-blue)
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-> 🇵🇹 *Observatório de Pontualidade Aérea: análise aberta e gratuita de atrasos e cancelamentos de voos, construída com Oracle PL/SQL. Guia passo a passo em português: [docs/FASE1.md](docs/FASE1.md).*
+**Open-source analytics of airline punctuality (on-time performance) built on Oracle Database 23ai, PL/SQL and utPLSQL, using Brazil's official open flight data.**
 
-![CI](https://github.com/Jano-Projects/aviation-otp-observatory/actions/workflows/ci.yml/badge.svg)
+> 🇵🇹 *Observatório de Pontualidade Aérea: análise aberta e gratuita de atrasos e cancelamentos de voos, construída com Oracle PL/SQL. Documentação em português: [guia de instalação](docs/pt/guia-instalacao.md) e [explicação do código](docs/pt/como-funciona.md).*
 
-Brazil's civil aviation authority (ANAC) publishes every scheduled flight leg each month: planned vs. actual departure and arrival, and whether the flight was cancelled. That is hundreds of thousands of flights a month, but only as raw CSV files. This project turns them into a clean, tested, queryable data model, and later into a public dashboard and API.
+Every month, Brazil's civil aviation authority (ANAC) publishes every scheduled flight leg: planned and actual departure and arrival, and whether it was cancelled. That is 80 to 90 thousand flights a month, but only as raw CSV files. This project turns them into a validated, tested and queryable Oracle data model. A public API and dashboard follow in later phases.
 
-## Status
+## Results so far
 
-| Phase | Scope | Status |
-|---|---|---|
-| **1. Foundation** | Oracle 23ai in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ this release |
-| 2. Analytics | Star schema, OTP / delay packages, materialized views, tuning report | planned |
-| 3. Exposure | Spring Boot REST API, public dashboard on GitHub Pages | planned |
-| 4. Ingestion & Portugal | Apache NiFi flow, Eurocontrol airport punctuality, OpenSky traffic | planned |
+January to July 2026, all scheduled flights (domestic and international) loaded from ANAC files:
 
-## Architecture (phase 1)
+| Month | Flights | Cancelled | On time (≤ 15 min) |
+|---|---:|---:|---:|
+| 2026-01 | 91,649 | 3.1% | 82.0% |
+| 2026-02 | 79,455 | 3.0% | 82.7% |
+| 2026-03 | 87,197 | 3.0% | 85.3% |
+| 2026-04 | 80,375 | 2.9% | 80.9% |
+| 2026-05 | 82,098 | 2.9% | 84.9% |
+| 2026-06 | 81,119 | 3.6% | 80.7% |
+| 2026-07 | 89,488 | 3.0% | 83.3% |
+| **Total** | **591,381** | **3.1%** | |
+
+591,381 lines loaded, 0 rejected by validation. *On time* = arrived at most 15 minutes after schedule (the industry-standard OTP15), measured over flown legs with both scheduled and actual arrival times.
+
+## How it works
 
 ```mermaid
 flowchart LR
@@ -29,19 +41,22 @@ flowchart LR
     D -.audit.-> G[(CORE_LOAD_RUN)]
 ```
 
-**Design choices worth a look**
+**Python only moves data; Oracle decides.** Python downloads each file and copies it, as text, into a staging table. Every rule (what is valid, how a delay is computed, what is a duplicate) lives in PL/SQL, in one place, under unit tests.
 
-- **Staging keeps the file as text.** Typing on read hides format errors, so the database decides what is valid, in one place (`STG_VRA_V`), with rules that are unit-tested (`pkg_vra_util`).
-- **Nothing disappears silently.** Every rejected line goes to `CORE_VRA_REJECT` with a reason code; every run is logged in `CORE_LOAD_RUN` with staged / loaded / rejected / duplicate counts.
-- **Idempotent monthly loads.** ANAC republishes old files, so a month is replaced as a whole inside one transaction. `CORE_FLIGHT` is interval-partitioned by month, so this only touches one partition.
-- **Delays as virtual columns.** `ARR_DELAY_MIN`, `IS_CANCELLED` and `ON_TIME_15` are defined once in the table, so every query computes punctuality the same way.
-- **Clear transaction contract.** `process_file` never commits. The run log is opened in an autonomous transaction, so failures stay visible even after a rollback, and SUCCESS is committed together with the data it describes.
-- **Real tests.** utPLSQL suites cover parsing, validation, deduplication, idempotency and error paths, and run in GitHub Actions against a real Oracle 23ai container.
+Design choices worth a look:
+
+- **Staging keeps the file as text.** Typing on read hides format errors, so the database validates in one place (`STG_VRA_V`) with unit-tested rules (`pkg_vra_util`).
+- **Nothing disappears silently.** Every rejected line goes to `CORE_VRA_REJECT` with a reason code; every run is logged in `CORE_LOAD_RUN` with staged, loaded, rejected and duplicate counts.
+- **Idempotent monthly loads.** ANAC republishes old files, so a month is replaced as a whole in one transaction. `CORE_FLIGHT` is interval-partitioned by month, so a reload touches one partition.
+- **Delays as virtual columns.** `ARR_DELAY_MIN`, `IS_CANCELLED` and `ON_TIME_15` are defined once in the table, so every query measures punctuality the same way.
+- **Clear transaction contract.** `process_file` never commits. Its run log opens in an autonomous transaction, so failures stay visible after a rollback, while SUCCESS is committed together with the data it describes.
+- **Precise error handling.** Impossible dates (ORA-018xx) become NULL; any other error is re-raised, never swallowed.
+
+More detail: [docs/architecture.md](docs/architecture.md) · data format and assumptions: [docs/data-notes.md](docs/data-notes.md).
 
 ## Quick start
 
-Requirements: Docker Engine with the Compose plugin (or Docker Desktop), Git, Python 3.11+, and about 4 GB of free RAM.
-Developed on Debian 13; works the same on any Linux, macOS or Windows.
+Requirements: Docker Engine with the Compose plugin (or Docker Desktop), Git, Python 3.11+, about 4 GB of free RAM. Developed on Debian 13; works the same on any Linux, macOS or Windows.
 
 ```bash
 git clone https://github.com/Jano-Projects/aviation-otp-observatory.git
@@ -51,14 +66,14 @@ pip install -r requirements.txt
 
 python tasks.py up        # start Oracle Database 23ai Free (first time: a few minutes)
 python tasks.py install   # schema OTP + utPLSQL + project objects
-python tasks.py test      # run the unit tests
-python tasks.py load --from 2026-01 --to 2026-07   # download and load real months
-python tasks.py status    # what was loaded, flights and on-time % per month
+python tasks.py test      # run the utPLSQL unit tests
+python tasks.py load --from 2026-01 --to 2026-07 --keep-going   # download and load real months
+python tasks.py status    # load runs, flights and on-time % per month
 ```
 
-Connect with any SQL client: host `localhost`, port `1521`, service `FREEPDB1`, user `otp`, password from `.env`.
+All commands: `python tasks.py --help`. Step-by-step guide for Debian, including a VirtualBox VM (in Portuguese): [docs/pt/guia-instalacao.md](docs/pt/guia-instalacao.md).
 
-Example query: punctuality by airline for one month.
+Connect with any SQL client: host `localhost`, port `1521`, service `FREEPDB1`, user `otp`, password from `.env`. Example: punctuality by airline, domestic flights, first half of 2026.
 
 ```sql
 select airline_icao,
@@ -66,35 +81,70 @@ select airline_icao,
        round(100 * avg(on_time_15), 1)    as on_time_pct,
        round(100 * avg(is_cancelled), 1)  as cancelled_pct
   from core_flight
- where ref_month = date '2026-07-01'
-   and line_type = 'N'                    -- domestic
+ where ref_month between date '2026-01-01' and date '2026-06-01'
+   and line_type = 'N'
  group by airline_icao
-having count(*) > 1000
+having count(*) > 5000
  order by on_time_pct desc;
 ```
+
+## Testing
+
+| Suite | Tool | Tests | What it covers |
+|---|---|---:|---|
+| `db/tests/test_pkg_vra_util` | utPLSQL | 10 | date parsing, null tokens, impossible dates, file names, every reject reason |
+| `db/tests/test_pkg_vra_load` | utPLSQL | 8 | loading, rejects, duplicates, idempotency, dimensions, audit log, error paths |
+| `tests/python/test_vra_file.py` | pytest | 15 | header detection, current and legacy layouts, download URLs |
+
+GitHub Actions runs everything on every push: the pytest suite, then a real Oracle 23ai container where it installs the schema, runs the utPLSQL suites and loads a sample of real ANAC lines end to end.
 
 ## Project layout
 
 ```
-db/
-  install.sql            master install script (SQL*Plus)
-  ddl/                   tables (Oracle 23ai IF NOT EXISTS: safe to re-run)
-  views/                 typed staging view
-  packages/              pkg_vra_util (rules), pkg_vra_load (load)
-  tests/                 utPLSQL suites and runner
-loader/                  Python: read, download and stage VRA files
-tests/python/            pytest suite (no database needed)
-tests/fixtures/          22 real VRA lines, byte for byte
-tasks.py                 cross-platform command runner
-docs/                    data notes and step-by-step guide (PT)
+├── README.md
+├── CHANGELOG.md
+├── docker-compose.yml        Oracle 23ai Free container
+├── tasks.py                  command runner: up, install, test, load, status, sql, down, reset
+├── requirements*.txt
+├── db/                       everything that runs inside Oracle (SQL*Plus scripts)
+│   ├── install.sql           master install script
+│   ├── admin/                schema creation, invalid-object check
+│   ├── ddl/                  tables and indexes (Oracle 23ai IF NOT EXISTS: safe to re-run)
+│   ├── views/                typed staging view
+│   ├── packages/             pkg_vra_util (rules), pkg_vra_load (load)
+│   └── tests/                utPLSQL suites and runner
+├── loader/                   Python: read, download and stage VRA files
+├── tests/
+│   ├── python/               pytest suite (no database needed)
+│   └── fixtures/             22 real VRA lines, byte for byte
+├── docs/                     documentation (see below)
+└── .github/workflows/ci.yml  CI pipeline
 ```
 
-## Data
+## Documentation
 
-- Source: [ANAC, Voo Regular Ativo (VRA)](https://www.gov.br/anac/pt-br/acesso-a-informacao/dados-abertos/areas-de-atuacao/voos-e-operacoes-aereas/voo-regular-ativo-vra), Brazilian government open data.
-- What the files really look like, and the assumptions this project makes: [docs/data-notes.md](docs/data-notes.md).
-- Raw data is never committed; `tasks.py load` downloads it.
+| Document | Language | For |
+|---|---|---|
+| [docs/architecture.md](docs/architecture.md) | English | data model, PL/SQL API, load sequence, testing strategy |
+| [docs/data-notes.md](docs/data-notes.md) | English | the real format of ANAC files and the assumptions made |
+| [docs/pt/guia-instalacao.md](docs/pt/guia-instalacao.md) | Português | installing from scratch on Debian 13, step by step |
+| [docs/pt/como-funciona.md](docs/pt/como-funciona.md) | Português | every file of the project explained |
+| [CHANGELOG.md](CHANGELOG.md) | English | what changed in each version |
 
-## License
+## Roadmap
 
-Code: MIT. Data: © ANAC, published as open data.
+| Phase | Scope | Status |
+|---|---|---|
+| **1. Foundation** | Oracle 23ai in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ done |
+| 2. Analytics | star schema, `pkg_otp` indicators, materialized views, tuning report (before/after) | next |
+| 3. Exposure | Spring Boot REST API, public dashboard on GitHub Pages | planned |
+| 4. Ingestion and Portugal | Apache NiFi flow, Eurocontrol airport punctuality, OpenSky traffic | planned |
+
+## Data and license
+
+- Source: [ANAC, Voo Regular Ativo (VRA)](https://www.gov.br/anac/pt-br/acesso-a-informacao/dados-abertos/areas-de-atuacao/voos-e-operacoes-aereas/voo-regular-ativo-vra), Brazilian government open data. Raw files are never committed; `tasks.py load` downloads them.
+- Code: [MIT](LICENSE). Data: © ANAC, published as open data.
+
+## Author
+
+**Victor Hugo dos Santos Correa**, Oracle PL/SQL developer. [LinkedIn](https://www.linkedin.com/in/victor-hsc)

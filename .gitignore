@@ -5,6 +5,9 @@
 data/
 .cache/
 
+# Patch files received for local fixes (never part of the project)
+*.patch
+
 # Python
 __pycache__/
 *.pyc
