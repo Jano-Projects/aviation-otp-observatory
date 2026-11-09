@@ -29,6 +29,7 @@ ENV_EXAMPLE = ROOT / ".env.example"
 UTPLSQL_DIR = ROOT / ".cache" / "utplsql"
 RAW_DIR = ROOT / "data" / "raw"
 SERVICE = "oracle"
+DB_DIR = "/workspace/db"  # where ./db is mounted inside the container
 PDB = "FREEPDB1"
 
 
@@ -88,9 +89,10 @@ def require_running() -> None:
         fail("The database is not running. Start it with: python tasks.py up")
 
 
-def sqlplus(logon: str, script: str, capture: bool = False) -> subprocess.CompletedProcess:
-    """Runs SQL*Plus inside the container, feeding the script through stdin."""
-    cmd = ["docker", "compose", "exec", "-T", "-w", "/tmp", SERVICE, "sqlplus", "-s", "-L", logon]
+def sqlplus(logon: str, script: str, capture: bool = False, workdir: str = "/tmp") -> subprocess.CompletedProcess:
+    """Runs SQL*Plus inside the container, feeding the script through stdin.
+    Scripts are started from `workdir`, so their relative @ paths resolve there."""
+    cmd = ["docker", "compose", "exec", "-T", "-w", workdir, SERVICE, "sqlplus", "-s", "-L", logon]
     return run(cmd, input=script, text=True, encoding="utf-8", errors="replace", capture_output=capture)
 
 
@@ -164,15 +166,21 @@ def ensure_utplsql_source(version: str) -> Path:
     return target
 
 
-def utplsql_installed(cfg: dict[str, str]) -> bool:
+def utplsql_state(cfg: dict[str, str]) -> str:
+    """'ok' (installed and valid), 'broken' (UT3 exists but install did not finish) or 'absent'."""
     result = sqlplus(
         sys_logon(cfg),
         "set heading off feedback off pagesize 0\n"
-        "select count(*) from dba_users where username = 'UT3';\nexit\n",
+        "select case\n"
+        "         when exists (select 1 from dba_objects where owner = 'UT3' and object_name = 'UT'\n"
+        "                       and object_type = 'PACKAGE BODY' and status = 'VALID') then 'ok'\n"
+        "         when exists (select 1 from dba_users where username = 'UT3') then 'broken'\n"
+        "         else 'absent'\n"
+        "       end from dual;\nexit\n",
         capture=True,
     )
     check(result, "Checking utPLSQL")
-    return result.stdout.strip().endswith("1")
+    return result.stdout.strip().splitlines()[-1].strip() if result.stdout.strip() else "absent"
 
 
 def cmd_install(args: argparse.Namespace) -> None:
@@ -188,17 +196,31 @@ def cmd_install(args: argparse.Namespace) -> None:
 
     version = cfg.get("UTPLSQL_VERSION", "v3.1.14")
     ensure_utplsql_source(version)
-    if utplsql_installed(cfg):
+    state = utplsql_state(cfg)
+    if state == "broken":
+        info("Removing an incomplete utPLSQL installation")
+        check(
+            sqlplus(sys_logon(cfg), "whenever sqlerror exit failure\ndrop user ut3 cascade;\nexit\n"),
+            "Removing incomplete utPLSQL",
+        )
+    if state == "ok":
         info("utPLSQL already installed")
     else:
         info(f"Installing utPLSQL {version} (takes about a minute)")
+        # The utPLSQL installer must run from its own "source" folder and writes a log
+        # there, so it runs from a writable copy inside the container.
         check(
-            sqlplus(sys_logon(cfg), f"@/workspace/utplsql/{version}/source/install_headless.sql\n"),
+            compose("exec", "-T", SERVICE, "bash", "-c",
+                    f"rm -rf /tmp/utplsql && cp -r /workspace/utplsql/{version}/source /tmp/utplsql"),
+            "Preparing utPLSQL sources",
+        )
+        check(
+            sqlplus(sys_logon(cfg), "@install_headless.sql\n", workdir="/tmp/utplsql"),
             "Installing utPLSQL",
         )
 
     info("Installing project objects")
-    check(sqlplus(otp_logon(cfg), "@/workspace/db/install.sql\n"), "Installing project objects")
+    check(sqlplus(otp_logon(cfg), "@install.sql\n", workdir=DB_DIR), "Installing project objects")
 
 
 def cmd_test(args: argparse.Namespace) -> None:
@@ -206,9 +228,9 @@ def cmd_test(args: argparse.Namespace) -> None:
     require_docker()
     require_running()
     info("Compiling test packages")
-    check(sqlplus(otp_logon(cfg), "@/workspace/db/tests/install_tests.sql\n"), "Compiling tests")
+    check(sqlplus(otp_logon(cfg), "@tests/install_tests.sql\n", workdir=DB_DIR), "Compiling tests")
     info("Running utPLSQL")
-    check(sqlplus(otp_logon(cfg), "@/workspace/db/tests/run_tests.sql\n"), "Unit tests")
+    check(sqlplus(otp_logon(cfg), "@tests/run_tests.sql\n", workdir=DB_DIR), "Unit tests")
 
 
 def parse_month(value: str) -> date:
