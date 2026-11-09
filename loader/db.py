@@ -173,6 +173,29 @@ def load_reference(conn: oracledb.Connection, anac_path: Path, oa_path: Path) ->
     )
 
 
+def refresh_mart(conn: oracledb.Connection, month: date | None = None) -> tuple[int, int]:
+    """Rebuilds the star schema for one month (or every month when month is None)
+    and commits. Returns (months refreshed, facts in those months)."""
+    with conn.cursor() as cur:
+        if month is None:
+            months = cur.callfunc("pkg_mart.refresh_all", int)
+            cur.execute("select count(*) from fact_flight")
+        else:
+            cur.callfunc("pkg_mart.refresh_month", int, [month])
+            months = 1
+            cur.execute("select count(*) from fact_flight where month_start = trunc(:1, 'MM')", [month])
+        (facts,) = cur.fetchone()
+    conn.commit()
+    return months, facts
+
+
+def refresh_mart_dimensions(conn: oracledb.Connection) -> None:
+    """Updates the dimensions in place (new names) without touching the facts."""
+    with conn.cursor() as cur:
+        cur.callfunc("pkg_mart.refresh_dimensions", int)
+    conn.commit()
+
+
 def sync_names(conn: oracledb.Connection) -> None:
     """Copies reference names onto codes that new VRA loads may have added."""
     with conn.cursor() as cur:

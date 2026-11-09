@@ -436,7 +436,7 @@ ut.expect(l_on_time).to_be_null();
 Os testes usam o mês **2099-01**, para nunca tocarem em dados reais.
 
 **`run_tests.sql`** corre tudo com `ut.run()`, imprime o resultado e lê a linha de resumo
-(`28 tests, 0 failed, 0 errored...`). Depois apaga de `CORE_LOAD_RUN` os registos de auditoria
+(`37 tests, 0 failed, 0 errored...`). Depois apaga de `CORE_LOAD_RUN` os registos de auditoria
 que os testes criaram (ficheiros do mês falso 2099), porque esses são gravados em transações
 autónomas e sobrevivem ao rollback. Se houver falhas, lança um erro, e o SQL*Plus sai com
 código ≠ 0 (o CI fica vermelho).
@@ -481,6 +481,45 @@ streaming, para os 360 MB nunca estarem inteiros em memória.
 
 **Testes:** `test_pkg_ref_load` (10 testes utPLSQL) e `tests/python/test_reference.py` (8 testes
 pytest), com amostras reais das duas fontes em `tests/fixtures/`.
+
+### Fase 2.2: o modelo em estrela
+
+**Porquê.** As tabelas `CORE_*` estão desenhadas para carregar dados com segurança. Para analisar,
+o formato de referência é o **modelo em estrela**: uma tabela de factos no centro (um voo por
+linha, com as medidas) e dimensões à volta (quando, a que hora, que companhia, que aeroportos).
+Qualquer ferramenta de BI e qualquer analista reconhece este formato.
+
+**`db/ddl/040_mart.sql`**:
+- **`DIM_DATE`**: um dia por linha, chave `YYYYMMDD` (por exemplo `20260704`), com mês e dia da
+  semana em português, semana ISO e indicação de fim de semana;
+- **`DIM_HOUR`**: as 24 horas, cada uma com o período do dia (madrugada, manhã, tarde, noite);
+- **`DIM_AIRLINE`** e **`DIM_AIRPORT`**: com **chave substituta** (`airline_key`, um número gerado),
+  além do código. Se um nome muda, a linha é atualizada no sítio (*SCD tipo 1*);
+- **`FACT_FLIGHT`**: um facto por voo, particionado por mês, com as chaves das dimensões e as
+  medidas (`IS_FLOWN`, `IS_CANCELLED`, `IS_MEASURABLE`, `ON_TIME_15`, atrasos).
+
+**Chaves estrangeiras `RELY DISABLE NOVALIDATE`.** No facto, as chaves estrangeiras são
+declaradas mas não verificadas linha a linha. O otimizador pode confiar nelas (`RELY`), mas o
+Oracle não gasta tempo a validar cada inserção. É a prática habitual em data warehouses: a
+integridade é garantida pela própria carga, que só insere factos com `JOIN` às dimensões.
+
+**`db/packages/pkg_mart`**:
+- **`build_dim_date`**: gera os dias com `CONNECT BY LEVEL` num único `MERGE`, sem ciclos. Os
+  nomes em português vêm de um `CASE` e não de `to_char(data, 'DAY')`, cujo resultado depende do
+  idioma da sessão. O dia da semana ISO calcula-se com `trunc(data) - trunc(data, 'IW') + 1`;
+- **`refresh_dimensions`**: `MERGE` das dimensões a partir de `CORE_*` + `REF_*`;
+- **`refresh_month`**: apaga os factos do mês e volta a inseri-los com um `INSERT ... SELECT`,
+  dentro da transação de quem chama. Fica registado em `CORE_LOAD_RUN` como `MART 2026-07`. Se um
+  voo ficar de fora (sem dimensão), aparece como rejeitado;
+- **`refresh_all`**: todos os meses.
+
+**Porque não troca de partição já?** A troca de partição (`exchange partition`) é mais rápida em
+volumes grandes, mas usa DDL, que faz commit sozinho. A fase 2.4 mede primeiro esta versão
+simples e depois compara-a com a troca de partição, com números reais.
+
+**Integração:** o `load` constrói o modelo em estrela de cada mês que carrega, o `load-ref`
+atualiza os nomes nas dimensões, e há um comando novo, `python tasks.py mart`, para reconstruir
+tudo.
 
 ## 6. Testes Python: `tests/`
 

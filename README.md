@@ -41,6 +41,8 @@ flowchart LR
     C -->|MERGE| E[(CORE_AIRLINE<br/>CORE_AIRPORT)]
     C -->|invalid lines| F[(CORE_VRA_REJECT)]
     D -.audit.-> G[(CORE_LOAD_RUN)]
+    D -->|pkg_mart| M[(Star schema<br/>FACT_FLIGHT + DIM_DATE, DIM_HOUR,<br/>DIM_AIRLINE, DIM_AIRPORT)]
+    E --> M
 ```
 
 **Python only moves data; Oracle decides.** Python downloads each file and copies it, as text, into a staging table. Every rule (what is valid, how a delay is computed, what is a duplicate) lives in PL/SQL, in one place, under unit tests.
@@ -53,6 +55,7 @@ Design choices worth a look:
 - **Delays as virtual columns.** `ARR_DELAY_MIN`, `IS_CANCELLED` and `ON_TIME_15` are defined once in the table, so every query measures punctuality the same way.
 - **Clear transaction contract.** `process_file` never commits. Its run log opens in an autonomous transaction, so failures stay visible after a rollback, while SUCCESS is committed together with the data it describes.
 - **Precise error handling.** Impossible dates (ORA-018xx) become NULL; any other error is re-raised, never swallowed.
+- **A star schema for analysis.** `FACT_FLIGHT` (one row per flight, partitioned by month) with date, hour, airline and airport dimensions on surrogate keys. Fact foreign keys are `RELY DISABLE NOVALIDATE`: declared for the optimizer, guaranteed by the load. Each month is rebuilt atomically; phase 2.4 compares this with a partition exchange.
 - **Two reference sources, explicit precedence.** ANAC gives official names in Portuguese; OurAirports fills the official airport name, IATA code and coordinates, and the codes ANAC lacks. The rules live in one MERGE, under tests.
 
 More detail: [docs/architecture.md](docs/architecture.md) · data format and assumptions: [docs/data-notes.md](docs/data-notes.md).
@@ -72,6 +75,7 @@ python tasks.py install   # schema OTP + utPLSQL + project objects
 python tasks.py test      # run the utPLSQL unit tests
 python tasks.py load --from 2026-01 --to 2026-07 --keep-going   # download and load real months
 python tasks.py load-ref  # airline and airport names (ANAC + OurAirports, ~370 MB, once)
+python tasks.py mart      # rebuild the star schema (load already does it for new months)
 python tasks.py status    # load runs, flights and on-time % per month
 ```
 
@@ -99,6 +103,7 @@ having count(*) > 5000
 | `db/tests/test_pkg_vra_util` | utPLSQL | 10 | date parsing, null tokens, impossible dates, file names, every reject reason |
 | `db/tests/test_pkg_vra_load` | utPLSQL | 8 | loading, rejects, duplicates, idempotency, dimensions, audit log, error paths |
 | `db/tests/test_pkg_ref_load` | utPLSQL | 10 | coordinates, latest-year names, source precedence, code matching, copy to core, audit |
+| `db/tests/test_pkg_mart` | utPLSQL | 9 | calendar in Portuguese, hour periods, dimensions, fact keys and measures, idempotency, audit |
 | `tests/python/test_vra_file.py` | pytest | 15 | header detection, current and legacy layouts, download URLs |
 | `tests/python/test_reference.py` | pytest | 8 | ANAC statistics and OurAirports readers |
 
@@ -117,7 +122,8 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 │   ├── admin/                schema creation, invalid-object check
 │   ├── ddl/                  tables and indexes (Oracle 23ai IF NOT EXISTS: safe to re-run)
 │   ├── views/                typed staging view
-│   ├── packages/             pkg_vra_util (rules), pkg_vra_load (load), pkg_ref_load (names), pkg_load_log (audit)
+│   ├── packages/             pkg_vra_util (rules), pkg_vra_load (load), pkg_ref_load (names),
+│   │                         pkg_mart (star schema), pkg_load_log (audit)
 │   └── tests/                utPLSQL suites and runner
 ├── loader/                   Python: read, download and stage VRA and reference files
 ├── tests/
@@ -142,7 +148,7 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 | Phase | Scope | Status |
 |---|---|---|
 | **1. Foundation** | Oracle 23ai in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ done |
-| 2. Analytics | ✅ 2.1 reference data · 2.2 star schema · 2.3 `pkg_otp` indicators and materialized views · 2.4 tuning report | in progress |
+| 2. Analytics | ✅ 2.1 reference data · ✅ 2.2 star schema · 2.3 `pkg_otp` indicators and materialized views · 2.4 tuning report (incl. partition exchange) | in progress |
 | 3. Exposure | Spring Boot REST API, public dashboard on GitHub Pages | planned |
 | 4. Ingestion and Portugal | Apache NiFi flow, Eurocontrol airport punctuality, OpenSky traffic | planned |
 
