@@ -27,12 +27,14 @@ January to July 2026, all scheduled flights (domestic and international) loaded 
 | 2026-07 | 89,488 | 3.0% | 83.3% |
 | **Total** | **591,381** | **3.1%** | |
 
-591,381 lines loaded, 0 rejected by validation. *On time* = arrived at most 15 minutes after schedule (the industry-standard OTP15), measured over flown legs with both scheduled and actual arrival times.
+591,381 lines loaded, 0 rejected by validation. All 87 airlines and 289 airports in these flights carry a name, from ANAC and OurAirports reference data. *On time* = arrived at most 15 minutes after schedule (the industry-standard OTP15), measured over flown legs with both scheduled and actual arrival times.
 
 ## How it works
 
 ```mermaid
 flowchart LR
+    R[ANAC statistics<br/>+ OurAirports] -->|tasks.py load-ref<br/>pkg_ref_load| RF[(REF_AIRLINE<br/>REF_AIRPORT)]
+    RF -->|names| E
     A[ANAC open data<br/>VRA monthly CSV] -->|tasks.py load<br/>python-oracledb| B[(STG_VRA<br/>raw text)]
     B --> C[STG_VRA_V<br/>typed view +<br/>pkg_vra_util rules]
     C -->|pkg_vra_load| D[(CORE_FLIGHT<br/>interval-partitioned<br/>by month)]
@@ -51,6 +53,7 @@ Design choices worth a look:
 - **Delays as virtual columns.** `ARR_DELAY_MIN`, `IS_CANCELLED` and `ON_TIME_15` are defined once in the table, so every query measures punctuality the same way.
 - **Clear transaction contract.** `process_file` never commits. Its run log opens in an autonomous transaction, so failures stay visible after a rollback, while SUCCESS is committed together with the data it describes.
 - **Precise error handling.** Impossible dates (ORA-018xx) become NULL; any other error is re-raised, never swallowed.
+- **Two reference sources, explicit precedence.** ANAC gives official names in Portuguese; OurAirports fills the official airport name, IATA code and coordinates, and the codes ANAC lacks. The rules live in one MERGE, under tests.
 
 More detail: [docs/architecture.md](docs/architecture.md) · data format and assumptions: [docs/data-notes.md](docs/data-notes.md).
 
@@ -68,6 +71,7 @@ python tasks.py up        # start Oracle Database 23ai Free (first time: a few m
 python tasks.py install   # schema OTP + utPLSQL + project objects
 python tasks.py test      # run the utPLSQL unit tests
 python tasks.py load --from 2026-01 --to 2026-07 --keep-going   # download and load real months
+python tasks.py load-ref  # airline and airport names (ANAC + OurAirports, ~370 MB, once)
 python tasks.py status    # load runs, flights and on-time % per month
 ```
 
@@ -94,7 +98,9 @@ having count(*) > 5000
 |---|---|---:|---|
 | `db/tests/test_pkg_vra_util` | utPLSQL | 10 | date parsing, null tokens, impossible dates, file names, every reject reason |
 | `db/tests/test_pkg_vra_load` | utPLSQL | 8 | loading, rejects, duplicates, idempotency, dimensions, audit log, error paths |
+| `db/tests/test_pkg_ref_load` | utPLSQL | 10 | coordinates, latest-year names, source precedence, code matching, copy to core, audit |
 | `tests/python/test_vra_file.py` | pytest | 15 | header detection, current and legacy layouts, download URLs |
+| `tests/python/test_reference.py` | pytest | 8 | ANAC statistics and OurAirports readers |
 
 GitHub Actions runs everything on every push: the pytest suite, then a real Oracle 23ai container where it installs the schema, runs the utPLSQL suites and loads a sample of real ANAC lines end to end.
 
@@ -111,12 +117,12 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 │   ├── admin/                schema creation, invalid-object check
 │   ├── ddl/                  tables and indexes (Oracle 23ai IF NOT EXISTS: safe to re-run)
 │   ├── views/                typed staging view
-│   ├── packages/             pkg_vra_util (rules), pkg_vra_load (load)
+│   ├── packages/             pkg_vra_util (rules), pkg_vra_load (load), pkg_ref_load (names), pkg_load_log (audit)
 │   └── tests/                utPLSQL suites and runner
-├── loader/                   Python: read, download and stage VRA files
+├── loader/                   Python: read, download and stage VRA and reference files
 ├── tests/
 │   ├── python/               pytest suite (no database needed)
-│   └── fixtures/             22 real VRA lines, byte for byte
+│   └── fixtures/             real samples of each source (VRA, ANAC statistics, OurAirports)
 ├── docs/                     documentation (see below)
 └── .github/workflows/ci.yml  CI pipeline
 ```
@@ -136,14 +142,16 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 | Phase | Scope | Status |
 |---|---|---|
 | **1. Foundation** | Oracle 23ai in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ done |
-| 2. Analytics | star schema, `pkg_otp` indicators, materialized views, tuning report (before/after) | next |
+| 2. Analytics | ✅ 2.1 reference data · 2.2 star schema · 2.3 `pkg_otp` indicators and materialized views · 2.4 tuning report | in progress |
 | 3. Exposure | Spring Boot REST API, public dashboard on GitHub Pages | planned |
 | 4. Ingestion and Portugal | Apache NiFi flow, Eurocontrol airport punctuality, OpenSky traffic | planned |
 
 ## Data and license
 
-- Source: [ANAC, Voo Regular Ativo (VRA)](https://www.gov.br/anac/pt-br/acesso-a-informacao/dados-abertos/areas-de-atuacao/voos-e-operacoes-aereas/voo-regular-ativo-vra), Brazilian government open data. Raw files are never committed; `tasks.py load` downloads them.
-- Code: [MIT](LICENSE). Data: © ANAC, published as open data.
+- Flights: [ANAC, Voo Regular Ativo (VRA)](https://www.gov.br/anac/pt-br/acesso-a-informacao/dados-abertos/areas-de-atuacao/voos-e-operacoes-aereas/voo-regular-ativo-vra), Brazilian government open data.
+- Airline and airport names: ANAC *Dados Estatísticos do Transporte Aéreo* (open data) and [OurAirports](https://ourairports.com/data/) (public domain).
+- Raw files are never committed; `tasks.py load` and `load-ref` download them.
+- Code: [MIT](LICENSE). Data: © ANAC, published as open data; OurAirports data is in the public domain.
 
 ## Author
 

@@ -436,12 +436,51 @@ ut.expect(l_on_time).to_be_null();
 Os testes usam o mês **2099-01**, para nunca tocarem em dados reais.
 
 **`run_tests.sql`** corre tudo com `ut.run()`, imprime o resultado e lê a linha de resumo
-(`18 tests, 0 failed, 0 errored...`). Depois apaga de `CORE_LOAD_RUN` os registos de auditoria
+(`28 tests, 0 failed, 0 errored...`). Depois apaga de `CORE_LOAD_RUN` os registos de auditoria
 que os testes criaram (ficheiros do mês falso 2099), porque esses são gravados em transações
 autónomas e sobrevivem ao rollback. Se houver falhas, lança um erro, e o SQL*Plus sai com
 código ≠ 0 (o CI fica vermelho).
 
 ---
+
+### Fase 2.1: dados de referência (nomes de companhias e aeroportos)
+
+O VRA só traz códigos (`GLO`, `SBGR`). Os nomes vêm de duas outras fontes, e cada uma manda
+naquilo em que é melhor:
+
+| Fonte | O que dá | Porquê esta |
+|---|---|---|
+| ANAC, Dados Estatísticos | nome oficial das companhias, cidade, estado, país e continente dos aeroportos, em português | é a mesma entidade que publica o VRA, cobre 100% das companhias |
+| OurAirports | nome oficial do aeroporto, código IATA, código ISO do país, coordenadas | domínio público, mundial, cobre os aeroportos que a ANAC não tem |
+
+**`db/ddl/030_reference.sql`**: três tabelas de staging (texto, como sempre) e duas tabelas finais,
+`REF_AIRLINE` e `REF_AIRPORT`. As colunas de texto usam `varchar2(n char)`: por defeito o Oracle
+mede `varchar2` em **bytes**, e "AÉREAS" tem mais bytes do que letras em UTF-8.
+
+**`db/packages/pkg_load_log`**: o registo de execuções (`start_run`, `mark_success`, `mark_failed`)
+saiu do `pkg_vra_load` para um package próprio, porque agora há duas cargas a usá-lo. Código
+repetido em dois packages seria a mesma regra em dois sítios.
+
+**`db/packages/pkg_ref_load`**: as regras de precedência, cada uma num `MERGE`:
+- **companhias:** para cada código, o nome do ano mais recente (`row_number() over (partition by
+  código order by ano desc)`): uma companhia que mudou de nome fica com o nome atual;
+- **aeroportos:** `full outer join` entre a ANAC (cidade, país) e o OurAirports (nome, IATA,
+  coordenadas). No OurAirports, um código pode estar em `icao_code`, `ident` ou `gps_code`: a
+  procura faz-se por esta ordem, e entre iguais ganha o aeroporto maior. Assim, um heliporto que
+  use o mesmo código num campo secundário nunca "rouba" o nome a um aeroporto;
+- **`to_coord`:** converte `'-23.435556'` em número sem depender do separador decimal da sessão
+  (o sinal é tratado à parte e o formato numérico é explícito);
+- **`sync_core`:** copia os nomes para `CORE_AIRLINE` e `CORE_AIRPORT`. O comando `load` chama-o
+  depois de cada carga, para códigos novos ganharem nome logo.
+
+**`loader/reference.py`**: o ficheiro da ANAC tem 1,1 milhões de linhas, mas só cerca de 11 600
+combinações distintas de (código, nome, país...). O leitor lê-o em *streaming* (linha a linha,
+sem o carregar todo em memória) e guarda cada combinação uma vez. Reduz o volume sem decidir nada:
+escolher o nome mais recente continua a ser feito em SQL. O `download_file` também descarrega em
+streaming, para os 360 MB nunca estarem inteiros em memória.
+
+**Testes:** `test_pkg_ref_load` (10 testes utPLSQL) e `tests/python/test_reference.py` (8 testes
+pytest), com amostras reais das duas fontes em `tests/fixtures/`.
 
 ## 6. Testes Python: `tests/`
 

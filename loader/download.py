@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 import time
 import urllib.error
 import urllib.request
@@ -112,3 +113,24 @@ def _save(target: Path, content: bytes) -> Path:
     partial.write_bytes(content)
     partial.replace(target)
     return target
+
+
+def download_file(url: str, target: Path, force: bool = False, attempts: int = 3) -> Path:
+    """Streams a (possibly large) file to disk, so it never sits whole in memory.
+    Reuses an existing file unless force=True."""
+    if target.exists() and not force:
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_suffix(target.suffix + ".part")
+    request = urllib.request.Request(_url(url), headers={"User-Agent": USER_AGENT})
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response, partial.open("wb") as out:
+                shutil.copyfileobj(response, out, length=1 << 20)
+            partial.replace(target)
+            return target
+        except (urllib.error.URLError, TimeoutError) as exc:
+            if attempt == attempts:
+                raise DownloadError(f"Could not download {url}: {exc}") from exc
+            time.sleep(2 * attempt)
+    raise AssertionError("unreachable")

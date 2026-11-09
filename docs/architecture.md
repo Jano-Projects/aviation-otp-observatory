@@ -22,8 +22,9 @@ sequence and how it is tested. For the file format of the source data, see
 |---|---|---|---|
 | Staging | `STG_VRA` | the source file line by line, every column `VARCHAR2` | Python loader |
 | Transformation | `STG_VRA_V` | staging typed (`DATE`, trimmed codes) plus `REJECT_REASON` per line | view over `STG_VRA` |
-| Core | `CORE_FLIGHT`, `CORE_AIRLINE`, `CORE_AIRPORT` | validated, deduplicated flights and their dimensions | `pkg_vra_load` |
-| Audit | `CORE_LOAD_RUN`, `CORE_VRA_REJECT` | one row per load run; every rejected line with its reason | `pkg_vra_load` |
+| Core | `CORE_FLIGHT`, `CORE_AIRLINE`, `CORE_AIRPORT` | validated, deduplicated flights and their dimensions | `pkg_vra_load` (names: `pkg_ref_load`) |
+| Reference | `STG_REF_AIRLINE`, `STG_REF_AIRPORT_ANAC`, `STG_REF_AIRPORT_OA` → `REF_AIRLINE`, `REF_AIRPORT` | airline and airport names and attributes from two sources | Python loader, `pkg_ref_load` |
+| Audit | `CORE_LOAD_RUN`, `CORE_VRA_REJECT` | one row per load run; every rejected line with its reason | `pkg_load_log`, `pkg_vra_load` |
 
 ## Tables
 
@@ -32,8 +33,10 @@ sequence and how it is tested. For the file format of the source data, see
 | `STG_VRA` | `(SRC_FILE, LINE_NO)` | lineage: every value traces back to a file and line |
 | `CORE_LOAD_RUN` | `RUN_ID` (identity) | status `RUNNING` → `SUCCESS` or `FAILED`; counts staged, loaded, rejected, duplicate |
 | `CORE_VRA_REJECT` | `(RUN_ID, LINE_NO)` | reason code and the original line |
-| `CORE_AIRLINE` | `AIRLINE_ICAO` (3 chars) | first and last month seen; names arrive in phase 2 |
-| `CORE_AIRPORT` | `AIRPORT_ICAO` (4 chars) | first and last month seen; names and countries arrive in phase 2 |
+| `CORE_AIRLINE` | `AIRLINE_ICAO` (3 chars) | first and last month seen; name copied from `REF_AIRLINE` |
+| `CORE_AIRPORT` | `AIRPORT_ICAO` (4 chars) | first and last month seen; display name and ISO country copied from `REF_AIRPORT` |
+| `REF_AIRLINE` | `AIRLINE_ICAO` | ANAC name of the most recent year, nationality |
+| `REF_AIRPORT` | `AIRPORT_ICAO` | official name, city, state, country (PT), ISO country, continent, IATA, coordinates, `NAME_SOURCE` |
 | `CORE_FLIGHT` | `FLIGHT_ID` (identity) | interval-partitioned by `REF_MONTH`; local indexes; foreign keys to both dimensions |
 
 `CORE_FLIGHT` virtual columns:
@@ -70,6 +73,14 @@ Reject reasons, in the order they are checked:
 | `NO_DEPARTURE_TIME` | neither scheduled nor actual departure |
 | `DONE_WITHOUT_ACTUALS` | flown (`REALIZADO`) but without actual times |
 
+### `pkg_load_log`: the run log, shared by every load
+
+| Routine | Transaction |
+|---|---|
+| `start_run(p_src_file, p_ref_month)` | autonomous: the `RUNNING` row survives a rollback |
+| `mark_success(p_run_id, counts...)` | the caller's: `SUCCESS` commits or rolls back with the data |
+| `mark_failed(p_run_id, p_error)` | autonomous: the failure stays recorded |
+
 ### `pkg_vra_load`
 
 ```sql
@@ -81,6 +92,28 @@ month cannot be derived, and `ORA-20002` (`e_no_staged_rows`) when nothing is st
 
 **Transaction contract:** it never commits. The caller commits (the Python loader, once per
 file) or rolls back (unit tests).
+
+### `pkg_ref_load`
+
+```sql
+function process_reference(p_anac_file in varchar2, p_oa_file in varchar2) return number;
+function sync_core return pls_integer;
+function to_coord(p_value in varchar2) return number deterministic;
+```
+
+Precedence rules, all in one `MERGE` per table:
+
+| Attribute | Source |
+|---|---|
+| airline name, nationality | ANAC, the most recent year reported for the code |
+| airport city, state, country (Portuguese), continent | ANAC, the most recent year |
+| airport official name, IATA code, ISO country, coordinates | OurAirports |
+| airports ANAC does not know | OurAirports alone (`NAME_SOURCE = 'OURAIRPORTS'`) |
+
+An OurAirports row matches a 4-character code by `icao_code` first, then `ident`, then
+`gps_code`; among matches of the same strength, larger airports win (a heliport never takes an
+airport's code). `sync_core` copies names onto `CORE_AIRLINE` and `CORE_AIRPORT`; the `load`
+command calls it after every month, so new codes get names at once.
 
 ## Load sequence
 
@@ -118,7 +151,8 @@ python tasks.py load --from 2026-07
 |---|---|---|---|
 | Unit: parsing and rules | utPLSQL (`test_pkg_vra_util`) | `tasks.py test`, CI | literal values |
 | Unit: load behaviour | utPLSQL (`test_pkg_vra_load`) | `tasks.py test`, CI | 6 invented lines in month 2099, rolled back after each test |
-| Unit: file reading | pytest | `pytest`, CI | 22 real ANAC lines (`tests/fixtures`) |
+| Unit: reference merge | utPLSQL (`test_pkg_ref_load`) | `tasks.py test`, CI | invented codes (`ZZA`, `ZZZA`, `ZZZB`), rolled back after each test |
+| Unit: file reading | pytest | `pytest`, CI | real samples of each source (`tests/fixtures`) |
 | End to end | CI job | every push | the real sample loaded into a fresh Oracle |
 
 `db/tests/run_tests.sql` runs every suite, deletes the audit rows the tests leave behind (they

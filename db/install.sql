@@ -14,16 +14,23 @@ prompt ==> Staging tables
 prompt ==> Core tables
 @ddl/020_core.sql
 
+prompt ==> Reference tables
+@ddl/030_reference.sql
+
 prompt ==> Package specifications
 @packages/pkg_vra_util.pks
+@packages/pkg_load_log.pks
 @packages/pkg_vra_load.pks
+@packages/pkg_ref_load.pks
 
 prompt ==> Views
 @views/stg_vra_v.sql
 
 prompt ==> Package bodies
 @packages/pkg_vra_util.pkb
+@packages/pkg_load_log.pkb
 @packages/pkg_vra_load.pkb
+@packages/pkg_ref_load.pkb
 
 prompt ==> Checking for invalid objects
 @admin/check_invalid.sql

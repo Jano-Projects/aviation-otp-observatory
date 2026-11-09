@@ -5,6 +5,7 @@
     python tasks.py install   create the OTP schema, install utPLSQL and the project objects
     python tasks.py test      compile and run the utPLSQL unit tests
     python tasks.py load      download and load VRA months (or a local file)
+    python tasks.py load-ref  download and load airline/airport names (ANAC + OurAirports)
     python tasks.py status    show the latest load runs and flights per month
     python tasks.py sql       open an interactive SQL*Plus session as OTP
     python tasks.py down      stop the container (data is kept)
@@ -28,6 +29,7 @@ ENV_FILE = ROOT / ".env"
 ENV_EXAMPLE = ROOT / ".env.example"
 UTPLSQL_DIR = ROOT / ".cache" / "utplsql"
 RAW_DIR = ROOT / "data" / "raw"
+REF_DIR = ROOT / "data" / "reference"
 SERVICE = "oracle"
 DB_DIR = "/workspace/db"  # where ./db is mounted inside the container
 PDB = "FREEPDB1"
@@ -250,7 +252,7 @@ def month_range(start: date, end: date) -> list[date]:
 
 
 def cmd_load(args: argparse.Namespace) -> None:
-    from loader.db import connect, load_file
+    from loader.db import connect, load_file, sync_names
     from loader.download import DownloadError, download_month
 
     cfg = env()
@@ -291,12 +293,48 @@ def cmd_load(args: argparse.Namespace) -> None:
             print(f"   {summary}")
             if summary.status != "SUCCESS":
                 failures += 1
+        if files:
+            sync_names(conn)  # give names to codes these months may have added
     if failures:
         fail(f"{failures} file(s) failed. See CORE_LOAD_RUN.ERROR_MESSAGE for details.")
 
 
+def cmd_load_ref(args: argparse.Namespace) -> None:
+    from loader.db import connect, load_reference
+    from loader.download import DownloadError, download_file
+    from loader.reference import ANAC_STATS_URL, OURAIRPORTS_URL
+
+    cfg = env()
+    require_docker()
+    require_running()
+
+    try:
+        if args.anac_file:
+            anac = Path(args.anac_file)
+        else:
+            info("Downloading ANAC statistics (about 360 MB, only the first time)")
+            anac = download_file(ANAC_STATS_URL, REF_DIR / "Dados_Estatisticos.csv", force=args.force)
+        if args.airports_file:
+            airports = Path(args.airports_file)
+        else:
+            info("Downloading OurAirports airports.csv (about 13 MB)")
+            airports = download_file(OURAIRPORTS_URL, REF_DIR / "airports.csv", force=args.force)
+    except DownloadError as exc:
+        fail(str(exc))
+    for path in (anac, airports):
+        if not path.exists():
+            fail(f"File not found: {path}")
+
+    info(f"Loading reference data from {anac.name} and {airports.name}")
+    with connect("otp", cfg["OTP_PASSWORD"], int(cfg.get("ORACLE_PORT", "1521"))) as conn:
+        summary = load_reference(conn, anac, airports)
+    print(f"   {summary}")
+    if summary.status != "SUCCESS":
+        fail("Reference load failed. See CORE_LOAD_RUN.ERROR_MESSAGE for details.")
+
+
 def cmd_status(args: argparse.Namespace) -> None:
-    from loader.db import connect
+    from loader.db import connect, names_coverage
 
     cfg = env()
     require_running()
@@ -308,9 +346,9 @@ def cmd_status(args: argparse.Namespace) -> None:
             "to_char(started_at, 'YYYY-MM-DD HH24:MI') from core_load_run order by run_id desc "
             "fetch first 10 rows only"
         )
-        print(f"   {'run':>5}  {'file':<22} {'month':<8} {'status':<8} {'loaded':>9} {'rejected':>9}  started")
+        print(f"   {'run':>5}  {'file':<34} {'month':<8} {'status':<8} {'loaded':>9} {'rejected':>9}  started")
         for run_id, src, month, status, loaded, rejected, started in cur:
-            print(f"   {run_id:>5}  {src:<22} {month or '':<8} {status:<8} "
+            print(f"   {run_id:>5}  {src[:34]:<34} {month or '':<8} {status:<8} "
                   f"{loaded or 0:>9,} {rejected or 0:>9,}  {started}")
         info("Flights per month")
         cur.execute(
@@ -320,6 +358,9 @@ def cmd_status(args: argparse.Namespace) -> None:
         print(f"   {'month':<8} {'flights':>9} {'cancelled':>10} {'on-time %':>10}")
         for month, flights, cancelled, otp in cur:
             print(f"   {month:<8} {flights:>9,} {cancelled:>10,} {f'{otp:.1f}' if otp is not None else '-':>10}")
+        airlines_named, airports_named = names_coverage(cur)
+        info("Names (load them with: python tasks.py load-ref)")
+        print(f"   airlines with a name: {airlines_named}    airports with a name: {airports_named}")
 
 
 def cmd_sql(args: argparse.Namespace) -> None:
@@ -354,6 +395,12 @@ def main() -> None:
     p.add_argument("--force", action="store_true", help="download again even if the file exists")
     p.add_argument("--keep-going", action="store_true", help="skip months that cannot be downloaded")
     p.set_defaults(func=cmd_load)
+
+    p = sub.add_parser("load-ref", help="download and load airline and airport names")
+    p.add_argument("--anac-file", help="local copy of ANAC Dados_Estatisticos.csv instead of downloading")
+    p.add_argument("--airports-file", help="local copy of OurAirports airports.csv instead of downloading")
+    p.add_argument("--force", action="store_true", help="download again even if the files exist")
+    p.set_defaults(func=cmd_load_ref)
 
     sub.add_parser("status", help="show load runs and monthly counts").set_defaults(func=cmd_status)
     sub.add_parser("sql", help="interactive SQL*Plus as OTP").set_defaults(func=cmd_sql)

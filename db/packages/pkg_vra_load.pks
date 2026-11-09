@@ -4,8 +4,8 @@ create or replace package pkg_vra_load authid definer as
    *
    * Transaction contract: process_file does NOT commit. The caller decides
    * (the Python loader commits per file; unit tests roll back). The run row in
-   * CORE_LOAD_RUN is created in an autonomous transaction, so failed attempts
-   * are always visible even after a rollback.
+   * CORE_LOAD_RUN is written through pkg_load_log: it is created in an autonomous
+   * transaction, so failed attempts are always visible even after a rollback.
    */
 
   e_no_ref_month      exception;
