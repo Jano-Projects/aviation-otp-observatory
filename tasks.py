@@ -66,7 +66,7 @@ def compose(*args: str, **kwargs) -> subprocess.CompletedProcess:
 
 def require_docker() -> None:
     if shutil.which("docker") is None:
-        fail("Docker not found. Install Docker (see docs/FASE1.md, step 1).")
+        fail("Docker not found. Install it first (see \"Quick start\" in README.md).")
     result = run(["docker", "info"], capture_output=True, text=True)
     if result.returncode != 0:
         if "permission denied" in (result.stderr or "").lower():
