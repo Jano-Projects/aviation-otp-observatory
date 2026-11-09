@@ -4,7 +4,7 @@
 
 > 🇵🇹 *Observatório de Pontualidade Aérea: análise aberta e gratuita de atrasos e cancelamentos de voos, construída com Oracle PL/SQL. Guia passo a passo em português: [docs/FASE1.md](docs/FASE1.md).*
 
-![CI](https://github.com/Jano/aviation-otp-observatory/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/Jano-Projects/aviation-otp-observatory/actions/workflows/ci.yml/badge.svg)
 
 Brazil's civil aviation authority (ANAC) publishes every scheduled flight leg each month: planned vs. actual departure and arrival, and whether the flight was cancelled. That is hundreds of thousands of flights a month, but only as raw CSV files. This project turns them into a clean, tested, queryable data model, and later into a public dashboard and API.
 
@@ -44,7 +44,7 @@ Requirements: Docker Engine with the Compose plugin (or Docker Desktop), Git, Py
 Developed on Debian 13; works the same on any Linux, macOS or Windows.
 
 ```bash
-git clone https://github.com/Jano/aviation-otp-observatory.git
+git clone https://github.com/Jano-Projects/aviation-otp-observatory.git
 cd aviation-otp-observatory
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
