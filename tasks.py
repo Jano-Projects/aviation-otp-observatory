@@ -319,7 +319,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         )
         print(f"   {'month':<8} {'flights':>9} {'cancelled':>10} {'on-time %':>10}")
         for month, flights, cancelled, otp in cur:
-            print(f"   {month:<8} {flights:>9,} {cancelled:>10,} {otp if otp is not None else '-':>10}")
+            print(f"   {month:<8} {flights:>9,} {cancelled:>10,} {f'{otp:.1f}' if otp is not None else '-':>10}")
 
 
 def cmd_sql(args: argparse.Namespace) -> None:

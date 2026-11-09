@@ -22,6 +22,13 @@ begin
     end if;
   end loop;
 
+  -- The tests roll back their data, but the audit rows in CORE_LOAD_RUN are written
+  -- in autonomous transactions on purpose, so they survive. Remove the ones the tests
+  -- created (test files use the fake month 2099) to keep the real audit log clean.
+  delete from core_vra_reject where src_file like 'VRA\_2099%' escape '\';
+  delete from core_load_run   where src_file like 'VRA\_2099%' escape '\';
+  commit;
+
   if l_summary is null then
     raise_application_error(-20900, 'utPLSQL summary line not found: did the tests run?');
   end if;
