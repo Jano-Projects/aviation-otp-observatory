@@ -5,6 +5,7 @@
 ![PL/SQL](https://img.shields.io/badge/PL%2FSQL-utPLSQL%20tested-blue)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Web app: Oracle APEX](https://img.shields.io/badge/web%20app-Oracle%20APEX-555555)](https://github.com/Jano-Projects/aviation-otp-apex)
 
 **Open-source analytics of airline punctuality (on-time performance) built on Oracle AI Database 26ai (the successor of 23ai), PL/SQL and utPLSQL, using Brazil's official open flight data.**
 
