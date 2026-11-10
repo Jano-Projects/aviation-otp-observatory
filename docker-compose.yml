@@ -15,9 +15,9 @@ services:
       # Database files survive "docker compose down" and computer restarts.
       - oradata:/opt/oracle/oradata
       # Project SQL scripts, read-only inside the container (run with SQL*Plus).
-      - ./db:/workspace/db:ro
+      - ./db:/workspace/db:ro,z
       # utPLSQL sources, downloaded by "python tasks.py install".
-      - ./.cache/utplsql:/workspace/utplsql:ro
+      - ./.cache/utplsql:/workspace/utplsql:ro,z
     healthcheck:
       test: ["CMD", "healthcheck.sh"]
       interval: 10s
