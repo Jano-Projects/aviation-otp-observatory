@@ -5,6 +5,10 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed (documentation)
+- README and `docker-compose.yml` name the database actually shipped by `gvenzl/oracle-free:23`:
+  Oracle AI Database 26ai Free 23.26.3 (successor of 23ai), the version the project is tested with.
+
 ### Added (phase 2.2: star schema)
 - `FACT_FLIGHT` (one row per flight, interval-partitioned by month, local indexes) with
   `DIM_DATE`, `DIM_HOUR`, `DIM_AIRLINE` and `DIM_AIRPORT` (surrogate keys, SCD type 1).
