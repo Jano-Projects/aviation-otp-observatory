@@ -10,7 +10,7 @@
 
 > 🇵🇹 *Observatório de Pontualidade Aérea: análise aberta e gratuita de atrasos e cancelamentos de voos, construída com Oracle PL/SQL. Documentação em português: [guia de instalação](docs/pt/guia-instalacao.md) e [explicação do código](docs/pt/como-funciona.md).*
 
-Every month, Brazil's civil aviation authority (ANAC) publishes every scheduled flight leg: planned and actual departure and arrival, and whether it was cancelled. That is 80 to 90 thousand flights a month, but only as raw CSV files. This project turns them into a validated, tested and queryable Oracle data model. A public API and dashboard follow in later phases.
+Every month, Brazil's civil aviation authority (ANAC) publishes every scheduled flight leg: planned and actual departure and arrival, and whether it was cancelled. That is 80 to 90 thousand flights a month, but only as raw CSV files. This project turns them into a validated, tested and queryable Oracle data model. A local web app and REST API on top of it live in a separate repository, [aviation-otp-apex](https://github.com/Jano-Projects/aviation-otp-apex) (Oracle APEX + ORDS).
 
 ## Results so far
 
@@ -62,7 +62,7 @@ More detail: [docs/architecture.md](docs/architecture.md) · data format and ass
 
 ## Quick start
 
-Requirements: Docker Engine with the Compose plugin (or Docker Desktop), Git, Python 3.11+, about 4 GB of free RAM. Developed on Debian 13; works the same on any Linux, macOS or Windows.
+Requirements: Docker Engine with the Compose plugin (or Docker Desktop), Git, Python 3.11+, about 4 GB of free RAM. Developed on Debian 13 and Fedora (SELinux enforcing); works the same on any Linux, macOS or Windows.
 
 ```bash
 git clone https://github.com/Jano-Projects/aviation-otp-observatory.git
@@ -79,7 +79,7 @@ python tasks.py mart      # rebuild the star schema (load already does it for ne
 python tasks.py status    # load runs, flights and on-time % per month
 ```
 
-All commands: `python tasks.py --help`. Step-by-step guide for Debian, including a VirtualBox VM (in Portuguese): [docs/pt/guia-instalacao.md](docs/pt/guia-instalacao.md).
+All commands: `python tasks.py --help`. Step-by-step guide for Debian and Fedora, including a VirtualBox VM (in Portuguese): [docs/pt/guia-instalacao.md](docs/pt/guia-instalacao.md).
 
 Connect with any SQL client: host `localhost`, port `1521`, service `FREEPDB1`, user `otp`, password from `.env`. Example: punctuality by airline, domestic flights, first half of 2026.
 
@@ -139,7 +139,7 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 |---|---|---|
 | [docs/architecture.md](docs/architecture.md) | English | data model, PL/SQL API, load sequence, testing strategy |
 | [docs/data-notes.md](docs/data-notes.md) | English | the real format of ANAC files and the assumptions made |
-| [docs/pt/guia-instalacao.md](docs/pt/guia-instalacao.md) | Português | installing from scratch on Debian 13, step by step |
+| [docs/pt/guia-instalacao.md](docs/pt/guia-instalacao.md) | Português | installing from scratch on Debian 13 or Fedora, step by step |
 | [docs/pt/como-funciona.md](docs/pt/como-funciona.md) | Português | every file of the project explained |
 | [CHANGELOG.md](CHANGELOG.md) | English | what changed in each version |
 
@@ -149,7 +149,7 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 |---|---|---|
 | **1. Foundation** | Oracle 23ai in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ done |
 | 2. Analytics | ✅ 2.1 reference data · ✅ 2.2 star schema · 2.3 `pkg_otp` indicators and materialized views · 2.4 tuning report (incl. partition exchange) | in progress |
-| 3. Exposure | Spring Boot REST API, public dashboard on GitHub Pages | planned |
+| 3. Exposure | 3A local web app and REST API with Oracle APEX + ORDS ([aviation-otp-apex](https://github.com/Jano-Projects/aviation-otp-apex)) · 3B Spring Boot REST API · 3C FastAPI · public dashboard on GitHub Pages | in progress |
 | 4. Ingestion and Portugal | Apache NiFi flow, Eurocontrol airport punctuality, OpenSky traffic | planned |
 
 ## Data and license

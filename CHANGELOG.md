@@ -13,6 +13,15 @@ All notable changes to this project. The format follows
 - `python tasks.py mart`; `load` refreshes the star schema for the months it loads; `load-ref`
   updates the dimensions; `status` shows facts against flights.
 
+### Fixed
+- Fedora and other SELinux hosts: the folders shared with the database container are mounted
+  with the `z` label, so the container can read the SQL scripts and the utPLSQL sources.
+
+### Changed
+- Installation guide covers Fedora (dnf, `wheel`, Docker CE, SELinux) next to Debian, and makes
+  the Git identity step mandatory before the first commit.
+- README links to the web app repository, aviation-otp-apex.
+
 ### Fixed (phase 2.2)
 - Dimension primary keys are declared `RELY`, as required by the `RELY` foreign keys of
   `FACT_FLIGHT` (the first install stopped with ORA-25158).

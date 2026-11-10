@@ -1,6 +1,7 @@
-# Guia de instalação (Debian 13)
+# Guia de instalação (Debian 13 ou Fedora)
 
-Como pôr o projeto a funcionar do zero numa máquina Debian 13, incluindo numa VM VirtualBox.
+Como pôr o projeto a funcionar do zero numa máquina Debian 13 ou Fedora, incluindo numa VM VirtualBox.
+Os blocos estão escritos para Debian; onde o Fedora é diferente, há um bloco **Fedora** logo a seguir.
 Tempo estimado: 30 a 60 minutos, a maior parte à espera de downloads.
 
 Cada passo é um **bloco**: copie-o inteiro, cole no terminal e carregue em Enter.
@@ -61,6 +62,9 @@ exit
 
 **Termine a sessão no Debian e volte a entrar.** Depois, `sudo whoami` deve responder `root`.
 
+**Fedora:** o grupo de administradores chama-se `wheel`. O utilizador criado na instalação
+normalmente já pertence a ele. Se não pertencer: `su -`, depois `usermod -aG wheel user` e `exit`.
+
 ### A3. Copiar e colar entre o seu computador e a VM (opcional)
 
 A forma mais simples é abrir este guia no **Firefox dentro da VM** e copiar de lá.
@@ -83,6 +87,13 @@ sudo reboot
 
 Depois de reiniciar: **Dispositivos → Área de transferência partilhada → Bidirecional**.
 
+**Fedora:** as Guest Additions vêm num pacote, sem CD:
+
+```bash
+sudo dnf install -y virtualbox-guest-additions
+sudo reboot
+```
+
 ---
 
 ## Parte B: instalar as ferramentas
@@ -95,6 +106,12 @@ sudo apt install -y git python3 python3-venv python3-pip unzip curl ca-certifica
 ```
 
 **Deve ver:** termina sem linhas a começar por `E:`.
+
+**Fedora:**
+
+```bash
+sudo dnf install -y git python3 python3-pip unzip curl
+```
 
 ### B2. Docker (repositório oficial)
 
@@ -110,6 +127,22 @@ sudo usermod -aG docker $USER
 
 **Termine a sessão no Debian e volte a entrar** (para o grupo `docker` ficar ativo).
 
+**Fedora:** instale o Docker oficial (não o Podman que vem com o sistema) e ligue o serviço:
+
+```bash
+sudo dnf remove -y podman-docker
+sudo dnf install -y dnf-plugins-core
+sudo dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+sudo reboot
+```
+
+No Fedora com GNOME, terminar a sessão nem sempre ativa o grupo novo: reiniciar é o mais seguro.
+O Fedora tem o **SELinux** ligado; o `docker-compose.yml` já marca as pastas partilhadas com o
+contentor (`,z`), por isso não é preciso desligá-lo.
+
 ### B3. Confirmar
 
 ```bash
@@ -123,7 +156,7 @@ free -h
 **Deve ver:**
 - versões do Docker e do Compose;
 - `Hello from Docker!`, **sem usar sudo** (se der `permission denied`, termine a sessão de novo);
-- `Python 3.13...`;
+- `Python 3.11` ou mais recente;
 - em `free -h`, na coluna *available*, pelo menos **4 GB** (por exemplo `5.1Gi`).
 
 ### B4. (Opcional) GitHub CLI, para enviar alterações
@@ -135,7 +168,9 @@ sudo apt install -y gh
 gh --version
 ```
 
-Se aparecer `Unable to locate package gh`, use o repositório oficial do GitHub:
+**Fedora:** `sudo dnf install -y gh`.
+
+Se aparecer `Unable to locate package gh` (Debian), use o repositório oficial do GitHub:
 
 ```bash
 sudo apt install -y wget
@@ -166,13 +201,17 @@ na conta (funciona com "Continue with Google"), cole o código e clique em **Aut
 
 **Deve ver:** `✓ Logged in as ...`
 
-### B6. (Opcional) Identificar-se nos commits
+### B6. Identificar-se nos commits (obrigatório para fazer commits)
 
-Troque o e-mail pelo da sua conta GitHub (em GitHub → Settings → Emails):
+Uma vez por máquina. Sem isto, o primeiro `git commit` falha com `Author identity unknown`
+(em português: `Identidade do autor desconhecida`).
+Troque o e-mail pelo da sua conta GitHub (em GitHub → Settings → Emails). Para não o mostrar nos
+commits públicos, use o endereço `...@users.noreply.github.com` que essa página indica.
 
 ```bash
 git config --global user.name "O Seu Nome"
 git config --global user.email "SEU-EMAIL@gmail.com"
+git config --global init.defaultBranch main
 ```
 
 Não mostra nada no ecrã. É normal.
@@ -195,8 +234,8 @@ cd aviation-otp-observatory
 
 ### D1. Ambiente Python do projeto
 
-O Debian não deixa instalar bibliotecas no Python do sistema. Por isso, o projeto usa um
-ambiente próprio, a pasta `.venv`.
+O Debian (e, por boa prática, também o Fedora) não deve receber bibliotecas no Python do sistema.
+Por isso, o projeto usa um ambiente próprio, a pasta `.venv`.
 
 ```bash
 cd ~/projetos/aviation-otp-observatory
@@ -371,7 +410,9 @@ python tasks.py reset     # apaga TUDO (pede confirmação)
 |---|---|
 | `user is not in the sudoers file` | Parte A2. |
 | `su: user /home/user does not exist` | Escreveu `su ~` (til). O certo é `su -` (hífen). |
-| `permission denied ... docker.sock` | `sudo usermod -aG docker $USER` e termine a sessão. |
+| `permission denied ... docker.sock` | `sudo usermod -aG docker $USER` e termine a sessão (no Fedora, reinicie). Confirme com `groups`: tem de aparecer `docker`. |
+| `Permission denied` ao ler `/workspace/db` (Fedora) | O SELinux bloqueou a pasta. Confirme que o `docker-compose.yml` tem `:ro,z` nas duas pastas (`git pull`) e corra `python tasks.py up` de novo. |
+| `Identidade do autor desconhecida` / `Author identity unknown` | Parte B6. |
 | `gh: command not found` | Parte B4 (só necessário para enviar alterações). |
 | `error: externally-managed-environment` ou `No module named 'oracledb'` | Falta ativar o ambiente: `source .venv/bin/activate`. |
 | `The database is not running` | `python tasks.py up`. |
