@@ -1,12 +1,12 @@
 # Aviation OTP Observatory
 
 [![CI](https://github.com/Jano-Projects/aviation-otp-observatory/actions/workflows/ci.yml/badge.svg)](https://github.com/Jano-Projects/aviation-otp-observatory/actions/workflows/ci.yml)
-![Oracle 23ai Free](https://img.shields.io/badge/Oracle-23ai%20Free-F80000)
+![Oracle AI Database 26ai Free](https://img.shields.io/badge/Oracle%20AI%20Database-26ai%20Free-F80000)
 ![PL/SQL](https://img.shields.io/badge/PL%2FSQL-utPLSQL%20tested-blue)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Open-source analytics of airline punctuality (on-time performance) built on Oracle Database 23ai, PL/SQL and utPLSQL, using Brazil's official open flight data.**
+**Open-source analytics of airline punctuality (on-time performance) built on Oracle AI Database 26ai (the successor of 23ai), PL/SQL and utPLSQL, using Brazil's official open flight data.**
 
 > 🇵🇹 *Observatório de Pontualidade Aérea: análise aberta e gratuita de atrasos e cancelamentos de voos, construída com Oracle PL/SQL. Documentação em português: [guia de instalação](docs/pt/guia-instalacao.md) e [explicação do código](docs/pt/como-funciona.md).*
 
@@ -70,7 +70,7 @@ cd aviation-otp-observatory
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-python tasks.py up        # start Oracle Database 23ai Free (first time: a few minutes)
+python tasks.py up        # start Oracle AI Database 26ai Free (first time: a few minutes)
 python tasks.py install   # schema OTP + utPLSQL + project objects
 python tasks.py test      # run the utPLSQL unit tests
 python tasks.py load --from 2026-01 --to 2026-07 --keep-going   # download and load real months
@@ -96,6 +96,8 @@ having count(*) > 5000
  order by on_time_pct desc;
 ```
 
+**Database version.** The `gvenzl/oracle-free:23` image follows Oracle's releases: today it ships **Oracle AI Database 26ai Free 23.26.3**, the successor of 23ai (features such as `CREATE TABLE IF NOT EXISTS` work the same). The project is tested with that version; `python tasks.py sql` and `select banner_full from v$version` show which one you have.
+
 ## Testing
 
 | Suite | Tool | Tests | What it covers |
@@ -114,7 +116,7 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 ```
 ├── README.md
 ├── CHANGELOG.md
-├── docker-compose.yml        Oracle 23ai Free container
+├── docker-compose.yml        Oracle AI Database Free container (gvenzl/oracle-free:23)
 ├── tasks.py                  command runner: up, install, test, load, status, sql, down, reset
 ├── requirements*.txt
 ├── db/                       everything that runs inside Oracle (SQL*Plus scripts)
@@ -147,7 +149,7 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 
 | Phase | Scope | Status |
 |---|---|---|
-| **1. Foundation** | Oracle 23ai in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ done |
+| **1. Foundation** | Oracle Free in Docker, staging → core model, PL/SQL load package, utPLSQL tests, CI | ✅ done |
 | 2. Analytics | ✅ 2.1 reference data · ✅ 2.2 star schema · 2.3 `pkg_otp` indicators and materialized views · 2.4 tuning report (incl. partition exchange) | in progress |
 | 3. Exposure | 3A local web app and REST API with Oracle APEX + ORDS ([aviation-otp-apex](https://github.com/Jano-Projects/aviation-otp-apex)) · 3B Spring Boot REST API · 3C FastAPI · public dashboard on GitHub Pages | in progress |
 | 4. Ingestion and Portugal | Apache NiFi flow, Eurocontrol airport punctuality, OpenSky traffic | planned |

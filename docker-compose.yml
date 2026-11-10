@@ -1,4 +1,5 @@
-# Local development database: Oracle Database 23ai Free.
+# Local development database: Oracle AI Database Free. The gvenzl/oracle-free:23 tag
+# currently ships 26ai (23.26.x), the successor of 23ai.
 # Everything else (Python loader, tests) talks to it through port ${ORACLE_PORT}.
 name: otp-observatory
 
