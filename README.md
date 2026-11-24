@@ -28,6 +28,8 @@ January to July 2026, all scheduled flights (domestic and international) loaded 
 | 2026-07 | 89,488 | 3.0% | 83.3% |
 | **Total** | **591,381** | **3.1%** | |
 
+<p align="center"><img src="docs/images/otp-2026.png" alt="Line chart of on-time performance by month in 2026, between 80.7% in June and 85.3% in March, over bars with about 80 to 92 thousand flights a month" width="820"></p>
+
 591,381 lines loaded, 0 rejected by validation. All 87 airlines and 289 airports in these flights carry a name, from ANAC and OurAirports reference data. *On time* = arrived at most 15 minutes after schedule (the industry-standard OTP15), measured over flown legs with both scheduled and actual arrival times.
 
 ## How it works
@@ -132,8 +134,9 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 ├── tests/
 │   ├── python/               pytest suite (no database needed)
 │   └── fixtures/             real samples of each source (VRA, ANAC statistics, OurAirports)
-├── docs/                     documentation (see below)
-└── .github/workflows/ci.yml  CI pipeline
+├── docs/                     documentation (see below) and images/
+├── tools/configure-github.sh repository settings on GitHub, as code
+└── .github/                  CI pipeline, Dependabot, issue and pull request templates
 ```
 
 ## Documentation
@@ -161,6 +164,10 @@ GitHub Actions runs everything on every push: the pytest suite, then a real Orac
 - Airline and airport names: ANAC *Dados Estatísticos do Transporte Aéreo* (open data) and [OurAirports](https://ourairports.com/data/) (public domain).
 - Raw files are never committed; `tasks.py load` and `load-ref` download them.
 - Code: [MIT](LICENSE). Data: © ANAC, published as open data; OurAirports data is in the public domain.
+
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately, as described in [SECURITY.md](SECURITY.md). Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Author
 

@@ -1,0 +1,22 @@
+name: Dependabot
+
+# Turns on auto-merge for Dependabot pull requests. The merge only happens after the required
+# checks of main pass (ruleset "Protect main"), and the branch is deleted afterwards.
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    name: Merge when checks pass
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge
+        run: gh pr merge --auto --squash "$PR"
+        env:
+          PR: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ github.token }}

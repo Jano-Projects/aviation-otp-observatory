@@ -1,0 +1,27 @@
+name: Bug report
+description: Something fails or gives a wrong result
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks for reporting. **Never paste passwords, `.env` files or personal data.**"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected and what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Command output
+      description: The full output of the command that failed.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Debian 13, Docker 28.x, Oracle AI Database 26ai Free 23.26.3"
+    validations:
+      required: true

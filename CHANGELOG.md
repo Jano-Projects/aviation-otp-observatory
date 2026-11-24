@@ -5,6 +5,17 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Repository
+- Contributing guide, security policy, code of conduct, issue and pull request templates.
+- Dependabot keeps GitHub Actions and the Python packages up to date with one grouped pull request a month, merged
+  automatically once CI passes.
+- `tools/configure-github.sh`: repository settings as code (protected `main` and release tags,
+  required CI checks, squash merges, secret scanning, CodeQL, labels).
+- Social preview image in `docs/images/`.
+
+### Changed (CI)
+- `actions/checkout` v7 and `actions/setup-python` v7; the workflow token is read-only.
+
 ### Changed (documentation)
 - README and `docker-compose.yml` name the database actually shipped by `gvenzl/oracle-free:23`:
   Oracle AI Database 26ai Free 23.26.3 (successor of 23ai), the version the project is tested with.
