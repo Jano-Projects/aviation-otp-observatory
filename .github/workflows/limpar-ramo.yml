@@ -1,0 +1,24 @@
+name: Branch cleanup
+
+# Deletes the branch of a Dependabot pull request as soon as it is merged,
+# so the repository keeps only main.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    name: Delete merged branch
+    if: github.event.pull_request.merged && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete the branch
+        run: gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH" || echo "already deleted"
+        env:
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ github.token }}
